@@ -1,13 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom";
-
-function App({ text }) {
-  return (
-    <div>
-      <h1>{text}</h1>
-    </div>
-  );
-}
+import App from "./App";
 
 const domRootElement = document.getElementById("root");
 const reactRootElement = <App text="Hello, world!" />;

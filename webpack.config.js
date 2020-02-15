@@ -22,9 +22,7 @@ module.exports = function(env = DEFAULT_ENV) {
   );
 
   const commonConfig = {
-    entry: {
-      index: path.resolve(APP_DIR, "index.js")
-    },
+    entry: path.resolve(APP_DIR, "index.js"),
 
     output: {
       path: BUILD_DIR,
@@ -37,6 +35,10 @@ module.exports = function(env = DEFAULT_ENV) {
       children: false
     },
 
+    resolve: {
+      extensions: [".js", ".jsx", ".mjs", ".json"]
+    },
+
     module: {
       rules: [
         {
@@ -46,6 +48,7 @@ module.exports = function(env = DEFAULT_ENV) {
 
           options: {
             presets: ["@babel/preset-env", "@babel/preset-react"],
+            plugins: isDevServer ? [] : ["transform-react-remove-prop-types"],
             cacheDirectory: true
           }
         },
