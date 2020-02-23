@@ -1,121 +1,182 @@
+const fs = require("fs");
 const path = require("path");
-const merge = require("webpack-merge");
 
 const HtmlWebpackPlugin = require("html-webpack-plugin");
-const TerserWebpackPlugin = require("terser-webpack-plugin");
-const OptimizeCssAssetsPlugin = require("optimize-css-assets-webpack-plugin");
 const MiniCssExtractPlugin = require("mini-css-extract-plugin");
-const PrerenderSpaPlugin = require("prerender-spa-plugin");
-const FriendlyErrorsPlugin = require("friendly-errors-webpack-plugin");
+const TerserWebpackPlugin = require("terser-webpack-plugin");
+const OptimizeCssAssetsWebpackPlugin = require("optimize-css-assets-webpack-plugin");
+const ForkTsCheckerWebpackPlugin = require("fork-ts-checker-webpack-plugin");
+const FriendlyErrorsWebpackPlugin = require("friendly-errors-webpack-plugin");
 
-const APP_DIR = path.resolve(__dirname, "./src/");
-const BUILD_DIR = path.resolve(__dirname, "./build/");
+const devServerEnabled = Boolean(
+  process.argv.find(function(argv) {
+    return argv.includes("webpack-dev-server");
+  })
+);
 
-const DEFAULT_ENV = {
-  host: "localhost",
-  port: 3000
-};
+module.exports = function(webpackEnv = {}, webpackArgs = {}) {
+  const createSourceMaps = Boolean(webpackEnv.sourceMaps) || devServerEnabled;
+  const createProductionBundle = Boolean(webpackEnv.production);
 
-module.exports = function(env = DEFAULT_ENV) {
-  const isDevServer = process.argv.find(argv =>
-    argv.includes("webpack-dev-server")
-  );
+  function resolveFilename(filename, hashType) {
+    return createProductionBundle
+      ? filename.replace("[name]", `$&.[${hashType}]`)
+      : filename;
+  }
 
-  const commonConfig = {
-    entry: path.resolve(APP_DIR, "index.js"),
+  function getTranspilingLoaders(additionalLoaders = []) {
+    const babelPlugins = [
+      "@babel/plugin-transform-runtime",
+      "react-hot-loader/babel"
+    ];
+
+    if (createProductionBundle) {
+      babelPlugins.push("transform-react-remove-prop-types");
+    }
+
+    return [
+      {
+        loader: "babel-loader",
+        options: {
+          presets: ["@babel/preset-env", "@babel/preset-react"],
+          plugins: babelPlugins,
+          cacheDirectory: true,
+          cacheCompression: false
+        }
+      },
+
+      ...additionalLoaders
+    ];
+  }
+
+  function getStylingLoaders(additionalLoaders = []) {
+    return [
+      {
+        loader: MiniCssExtractPlugin.loader,
+        options: {
+          esModule: createProductionBundle,
+          hmr: devServerEnabled
+        }
+      },
+
+      {
+        loader: "css-loader",
+        options: {
+          // TODO: CSS Modules have an impact on build performance,
+          // might have to enable them only for .module.css files
+          modules: {
+            localIdentName: createProductionBundle
+              ? "[hash:base64]"
+              : "[path][name]__[local]"
+          },
+
+          esModule: createProductionBundle,
+          importLoaders: additionalLoaders.length + 1,
+          sourceMap: createSourceMaps
+        }
+      },
+
+      {
+        loader: "postcss-loader",
+        options: {
+          sourceMap: createSourceMaps,
+          plugins: [
+            require("postcss-flexbugs-fixes")(),
+            require("postcss-preset-env")({ stage: 3 }),
+            require("postcss-normalize")()
+          ]
+        }
+      },
+
+      ...additionalLoaders
+    ];
+  }
+
+  const config = {
+    mode: createProductionBundle ? "production" : "development",
+    bail: createProductionBundle,
+
+    devtool:
+      createSourceMaps &&
+      (devServerEnabled ? "cheap-module-source-map" : "source-map"),
+
+    entry: {
+      index: path.resolve(__dirname, "./src/index.js")
+    },
 
     output: {
-      path: BUILD_DIR,
-      filename: "bundle.js",
+      filename: resolveFilename("scripts/[name].js", "chunkhash:8"),
+      chunkFilename: resolveFilename("scripts/[name].js", "chunkhash:8"),
+
+      path: path.resolve(__dirname, "./build/"),
       publicPath: "/"
     },
 
-    stats: {
-      entrypoints: false,
-      children: false
-    },
-
     resolve: {
-      extensions: [".js", ".jsx", ".mjs", ".json"]
+      extensions: [".js", ".jsx", ".ts", ".tsx"],
+      alias: {
+        "react-dom": "@hot-loader/react-dom"
+      }
     },
 
     module: {
       rules: [
         {
           test: /\.jsx?$/,
-          loader: "babel-loader",
           exclude: /node_modules/,
-
-          options: {
-            presets: ["@babel/preset-env", "@babel/preset-react"],
-            plugins: isDevServer ? [] : ["transform-react-remove-prop-types"],
-            cacheDirectory: true
-          }
+          use: getTranspilingLoaders()
         },
 
         {
-          test: /\.(s*)css$/,
-          use: [
-            {
-              loader: MiniCssExtractPlugin.loader,
-              options: {
-                hmr: isDevServer
-              }
-            },
+          test: /\.(post)?css$/,
+          use: getStylingLoaders()
+        },
 
+        {
+          test: /\.s[ac]ss$/,
+          use: getStylingLoaders([
             {
-              loader: "css-loader",
+              loader: "resolve-url-loader",
               options: {
-                sourceMap: isDevServer,
-                modules: true
-              }
-            },
-
-            {
-              loader: "postcss-loader",
-              options: {
-                sourceMap: isDevServer,
-                plugins: () => [
-                  require("postcss-import")(),
-                  require("postcss-url")(),
-                  require("autoprefixer")()
-                ]
+                sourceMap: createSourceMaps
               }
             },
 
             {
               loader: "sass-loader",
               options: {
-                sourceMap: isDevServer
+                // source map needs to be always enabled in this loader since
+                // resolve-url-loader relies on source map data from preceeding loaders
+                sourceMap: true
               }
             }
-          ]
+          ])
         },
 
         {
-          test: /\.(png|jpe?g|gif|svg)(\?.*)?$/,
+          test: /\.(png|jpe?g|gif|svg)$/,
           loader: "url-loader",
           options: {
-            name: "images/[name].[hash:8].[ext]",
-            limit: 4096
+            name: resolveFilename("images/[name].[ext]", "contenthash:8"),
+            limit: 4 * 1024
           }
         },
 
         {
-          test: /\.(mp4|webm|ogg|mp3|wav|flac|aac)(\?.*)?$/,
+          test: /\.(mp4|webm|ogg|mp3|wav|flac|aac)$/,
           loader: "url-loader",
           options: {
-            name: "media/[name].[hash:8].[ext]",
-            limit: 4096
+            name: resolveFilename("media/[name].[ext]", "contenthash:8"),
+            limit: 4 * 1024
           }
         },
 
         {
-          test: /\.(woff2?|eot|ttf|otf)(\?.*)?$/,
+          test: /\.(woff2?|eot|ttf|otf)$/,
           loader: "url-loader",
           options: {
-            name: "fonts/[name].[hash:8].[ext]",
-            limit: 4096
+            name: resolveFilename("fonts/[name].[ext]", "contenthash:8"),
+            limit: 4 * 1024
           }
         }
       ]
@@ -123,94 +184,129 @@ module.exports = function(env = DEFAULT_ENV) {
 
     plugins: [
       new HtmlWebpackPlugin({
-        template: path.resolve(APP_DIR, "index.html")
+        template: path.resolve(__dirname, "./src/index.html"),
+        minify: createProductionBundle && {
+          collapseWhitespace: true,
+          decodeEntities: true,
+          keepClosingSlash: true,
+          removeComments: true,
+          removeEmptyAttributes: true,
+          removeRedundantAttributes: true,
+          removeStyleLinkTypeAttributes: true,
+          sortAttributes: true
+        }
+      }),
+
+      new MiniCssExtractPlugin({
+        filename: resolveFilename("styles/[name].css", "chunkhash:8"),
+        chunkFilename: resolveFilename("styles/[name].css", "chunkhash:8")
       })
-    ]
+    ],
+
+    node: {
+      child_process: "empty",
+      dgram: "empty",
+      dns: "mock",
+      fs: "empty",
+      http2: "empty",
+      module: "empty",
+      net: "empty",
+      tls: "empty"
+    },
+
+    stats: {
+      children: false,
+      modules: false
+    }
   };
 
-  if (!isDevServer) {
-    return merge(commonConfig, {
-      mode: "production",
+  const useTypeScript = fs.existsSync(
+    path.resolve(__dirname, "./tsconfig.json")
+  );
 
-      output: {
-        filename: "scripts/[name].[contenthash:8].js",
-        chunkFilename: "scripts/[name].[contenthash:8].js"
+  if (useTypeScript) {
+    config.module.rules.push({
+      test: /\.tsx?$/,
+      exclude: /node_modules/,
+      use: getTranspilingLoaders([
+        {
+          loader: "ts-loader",
+          options: {
+            transpileOnly: true,
+            experimentalWatchApi: true
+          }
+        }
+      ])
+    });
+
+    config.plugins.push(
+      new ForkTsCheckerWebpackPlugin({
+        async: devServerEnabled
+      })
+    );
+  }
+
+  if (createProductionBundle) {
+    config.optimization = {
+      moduleIds: "hashed",
+      runtimeChunk: "single",
+
+      splitChunks: {
+        cacheGroups: {
+          vendor: {
+            test: /node_modules/,
+            name: "vendor",
+            chunks: "all"
+          }
+        }
       },
 
-      optimization: {
-        splitChunks: {
-          cacheGroups: {
-            commons: {
-              test: /node_modules/,
-              name: "runtime",
-              chunks: "all"
+      minimizer: [
+        new TerserWebpackPlugin({
+          cache: true,
+          parallel: true,
+          extractComments: false,
+
+          terserOptions: {
+            compress: {
+              reduce_funcs: false,
+              typeofs: false
+            },
+
+            mangle: {
+              safari10: true
+            },
+
+            output: {
+              ascii_only: true,
+              comments: false
             }
           }
-        },
-
-        minimizer: [
-          new TerserWebpackPlugin({
-            parallel: true,
-            cache: true,
-
-            terserOptions: {
-              output: {
-                comments: false
-              },
-
-              compress: {
-                reduce_funcs: false,
-                typeofs: false
-              }
-            }
-          }),
-
-          new OptimizeCssAssetsPlugin({
-            cssProcessorOptions: {
-              safe: true,
-
-              autoprefixer: {
-                disable: true
-              },
-
-              discardComments: {
-                removeAll: true
-              }
-            }
-          })
-        ]
-      },
-
-      plugins: [
-        new MiniCssExtractPlugin({
-          filename: "styles/[name].[contenthash:8].css",
-          chunkFilename: "styles/[name].[contenthash:8].css"
         }),
 
-        new PrerenderSpaPlugin({
-          routes: ["/"],
-          staticDir: BUILD_DIR,
-
-          minify: {
-            collapseBooleanAttributes: true,
-            collapseWhitespace: true,
-            decodeEntities: true,
-            keepClosingSlash: true,
-            sortAttributes: true
+        new OptimizeCssAssetsWebpackPlugin({
+          cssProcessorOptions: {
+            preset: [
+              "default",
+              {
+                discardComments: {
+                  removeAll: true
+                }
+              }
+            ]
           }
         })
       ]
-    });
+    };
   }
 
-  return merge(commonConfig, {
-    mode: "development",
+  if (devServerEnabled) {
+    const host = webpackArgs.host || "localhost";
+    const port = webpackArgs.port || 3000;
 
-    devServer: {
-      contentBase: BUILD_DIR,
-
-      host: env.host,
-      port: env.port,
+    config.devServer = {
+      host: host,
+      port: port,
 
       hot: true,
       open: true,
@@ -220,16 +316,16 @@ module.exports = function(env = DEFAULT_ENV) {
         warnings: false,
         errors: true
       }
-    },
+    };
 
-    plugins: [
-      new FriendlyErrorsPlugin({
+    config.plugins.push(
+      new FriendlyErrorsWebpackPlugin({
         compilationSuccessInfo: {
-          messages: [
-            `Your application is running here: http://${env.host}:${env.port}`
-          ]
+          messages: [`Your application is accessible at http://${host}:${port}`]
         }
       })
-    ]
-  });
+    );
+  }
+
+  return config;
 };
