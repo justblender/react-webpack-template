@@ -4,26 +4,15 @@ A much lighter than `create-react-app` (yet still powerful) starter kit for crea
 
 ## Features
 
-### Code
-
-- Babel uses `preset-env` to allow the use of the latest JavaScript features;
-- Asset resolving (or transforming into Base64 URIs for files under 4 Kb) on `import` and `require()` statements;
-- Support for code splitting (aka "lazy loading");
-- Fine-tuned minification rules.
-
-### Style
-
-- Support for Sass (SCSS syntax only, let's keep old Sass syntax out of this world);
-- Automatic CSS extraction from every chunk into a separate `.css` file;
-- PostCSS transformations (autoprefixing and etc.);
-- Critical CSS optimizations;
-- Class name minification for production builds (i.e. `<div class="hello-world"></div>` becomes `<div class="a_2"></div>`)
-
-### Other
-
-- Builds are very lightweight and are not filled with unnecessary crap _(for starters)_ such as Manifests and Service Workers;
-- Basic pre-rendering for production builds;
-- Hot-reloading in development mode.
+- **TypeScript** support (`typescript` package needs to be installed separately);
+- Asset resolving (or transforming into Base64 URIs for files under - 4 Kb) on `import` and `require()` statements;
+- Support for **Sass** pre-processor and **CSS modules**;
+- **PostCSS** transformations (autoprefixing and etc.);
+- _TODO:_ Class name minification for production builds (i.e. `<div class="hello-world"></div>` becomes `<div class="a_2"></div>`);
+- **Batteries Not Included**: `manifest.json` and Service Workers are not generated to reduce the unneccesary bloat;
+- **Fine-tuned minification rules** for production builds;
+- Support for optional **pre-rendering**;
+- **Stateful hot-reloading** in development mode.
 
 ## Usage
 
