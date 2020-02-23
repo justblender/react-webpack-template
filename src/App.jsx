@@ -1,14 +1,7 @@
 import React from "react";
-import PropTypes from "prop-types";
+import { hot } from "react-hot-loader";
+import Greeting from "./components/Greeting";
 
-export default function App({ text }) {
-  return (
-    <div>
-      <h1>{text}</h1>
-    </div>
-  );
-}
-
-App.propTypes = {
-  text: PropTypes.string.isRequired
-};
+export default hot(module)(function App() {
+  return <Greeting text="Hello!" />;
+});
