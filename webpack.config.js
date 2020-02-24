@@ -25,10 +25,11 @@ module.exports = function(webpackEnv = {}, webpackArgs = {}) {
   }
 
   function getTranspilingLoaders(additionalLoaders = []) {
-    const babelPlugins = [
-      "@babel/plugin-transform-runtime",
-      "react-hot-loader/babel"
-    ];
+    const babelPlugins = ["@babel/plugin-transform-runtime"];
+
+    if (devServerEnabled) {
+      babelPlugins.push("react-hot-loader/babel");
+    }
 
     if (createProductionBundle) {
       babelPlugins.push("transform-react-remove-prop-types");
